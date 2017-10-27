@@ -1,0 +1,93 @@
+#!/bin/sh
+
+# This script takes three arguments: (1) the output directory, (2) English text, (3) Slovak text
+# It creates an MP3 flashcard consisting of the English text followed by the Slovak text twice.
+
+# Depends on this site: https://beta.soundoftext.com/
+# First we make a POST to https://sound-of-text-3ba84.firebaseapp.com/sounds
+# with a JSON payload containing our desired text.  It returns JSON containing a URL path.
+# We slam that path onto the end of a GET request to
+# https://firebasestorage.googleapis.com/v0/b/sound-of-text-3ba84.appspot.com/o/
+# and that returns a JSON object containing the secret token needed to get the audio.
+
+if [ $# -lt 3 ]; then
+  echo usage $0 outputdir english slovak && exit 1
+fi
+
+outputdir=$1
+entext=$2
+sktext=$3
+
+if [ ! -d $outputdir -o ! -w $outputdir ]; then
+  echo bad output directory $outputdir && exit 3
+fi
+
+voice_to_filename() {
+  echo $1.mp3
+}
+
+# This function converts text of a language to sound
+
+get_sound() {
+  local voice=$1
+  local text="$2"
+  echo processing $voice text: '"'"${text}"'"'
+
+  # First we hit firebaseapp which will make Google generate a token.
+  local payload="{\"text\": \"${text}\", \"voice\": \"${voice}\"}"
+  local path="$(curl -H "Content-type: application/json" -d "$payload" https://sound-of-text-3ba84.firebaseapp.com/sounds | sed 's/{"path":"\([^\"]*\)"}/\1/')"
+  local urltext=$(echo -n $path | hexdump -v -e '/1 "%02x"' | sed 's/\(..\)/%\1/g')
+  echo encoded $voice text $path is $urltext
+
+  # Next we hit GoogleApis.com to get the token
+  local token=$(curl https://firebasestorage.googleapis.com/v0/b/sound-of-text-3ba84.appspot.com/o/$urltext |
+            grep downloadTokens |
+            sed 's/.*downloadTokens": "\([^"]*\)".*/\1/')
+
+  echo the $voice download token is "'""$token""'"
+
+  # Finally, we hit GoogleApis.com again with the token to get the sound:
+  local filename=$(voice_to_filename $voice)
+  curl https://firebasestorage.googleapis.com/v0/b/sound-of-text-3ba84.appspot.com/o/${urltext}\?alt=media\&token=${token} > $filename
+  echo $filename
+}
+
+envoice=en-US
+skvoice=sk-SK
+
+get_sound $envoice "$entext"
+enfilename=$(voice_to_filename $envoice)
+get_sound $skvoice "$sktext"
+skfilename=$(voice_to_filename $skvoice)
+
+normalize() {
+  echo $@ | sed 's/?//g'
+}
+
+# Question marks in file names will cause problems.  Remove them before assembling the output filename.
+entext=$(normalize $entext)
+sktext=$(normalize $sktext)
+
+silencefile=silence.mp3
+outputfile="${outputdir}/${entext} - ${sktext}.mp3"
+
+echo outputfile is $outputfile
+
+# make a sound file of silence as long as the foreign sound file
+duration=`ffmpeg -i $skfilename 2>&1 | grep Duration | awk '{print $2}' | sed s/,//`
+
+# If the duration of the foreign speech is less than one second, make the silence one second long:
+duration=`echo $duration | sed 's/00:00:00\.[0-9][0-9]/00:00:01/'`
+
+echo duration is $duration
+
+ffmpeg -f lavfi -i anullsrc=r=24000:cl=mono -t $duration -b:a 32k -f mp3 - > $silencefile # 2>/dev/null
+
+# This generates the actual work-product
+ffmpeg -i "concat:${enfilename}|${silencefile}|${skfilename}|${silencefile}|${skfilename}|${silencefile}" -acodec copy "$outputfile" || exit 2 # 2>/dev/null
+
+rm $enfilename
+rm $skfilename
+rm $silencefile
+
+ls -l "$outputfile"
