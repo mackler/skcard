@@ -31,9 +31,10 @@ For this script to work, you will need the following programs installed:
 2. `curl`
 3. `grep`
 4. `sed`
-5. `hexdump`
+5. `awk`
+6. `hexdump`
 
-These are mostly pretty standard.
+Most of these are pretty standard.
 
 ## Credits
 
