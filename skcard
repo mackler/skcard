@@ -10,23 +10,17 @@
 # https://firebasestorage.googleapis.com/v0/b/sound-of-text-3ba84.appspot.com/o/
 # and that returns a JSON object containing the secret token needed to get the audio.
 
-if [ $# -lt 3 ]; then
-  echo usage $0 outputdir english slovak && exit 1
-fi
+# Configure the languages here:
+localvoice=en-US     # American English
+foreignvoice=sk-SK   # Slovak
 
-outputdir=$1
-entext=$2
-sktext=$3
+# Define some functions
 
-if [ ! -d $outputdir -o ! -w $outputdir ]; then
-  echo bad output directory $outputdir && exit 3
-fi
-
-voice_to_filename() {
-  echo $1.mp3
+usage() {
+  echo "usage: $1 outputdir english-text slovak-text | -n outputdir english-file slovak-file [ slovak-file-2 ]" && exit $2
 }
 
-# This function converts text of a language to sound
+# This function converts text of a language to sound using network services
 
 get_sound() {
   local voice=$1
@@ -52,42 +46,107 @@ get_sound() {
   echo $filename
 }
 
-envoice=en-US
-skvoice=sk-SK
+# This function just appends the MP3 filetype to a string to get a filename
 
-get_sound $envoice "$entext"
-enfilename=$(voice_to_filename $envoice)
-get_sound $skvoice "$sktext"
-skfilename=$(voice_to_filename $skvoice)
-
-normalize() {
-  echo $@ | sed 's/?//g'
+voice_to_filename() {
+  echo $1.mp3
 }
 
-# Question marks in file names will cause problems.  Remove them before assembling the output filename.
-entext=$(normalize $entext)
-sktext=$(normalize $sktext)
+# This function removes question marks and periods
+normalize() {
+  echo $@ | sed 's/?|\.//g'
+}
 
-silencefile=silence.mp3
-outputfile="${outputdir}/${entext} - ${sktext}.mp3"
+# PROGRAM EXECUTION STARTS HERE
 
-echo outputfile is $outputfile
+if [ $# -lt 3 ]; then # not enough arguments passed on script invocation
+  usage $0 1
+fi
 
-# make a sound file of silence as long as the foreign sound file
-duration=`ffmpeg -i $skfilename 2>&1 | grep Duration | awk '{print $2}' | sed s/,//`
+if [ "$1" = -n ]; then  # user is providing existing audio filenames rather than text to convert
+  use_local_files=true
+  shift
+fi
 
-# If the duration of the foreign speech is less than one second, make the silence one second long:
-duration=`echo $duration | sed 's/00:00:00\.[0-9][0-9]/00:00:01/'`
+outputdir=$1
 
-echo duration is $duration
+if [ ! -d "$outputdir" -o ! -w "$outputdir" ]; then
+  echo bad output directory $outputdir && exit 3
+fi
 
-ffmpeg -f lavfi -i anullsrc=r=24000:cl=mono -t $duration -b:a 32k -f mp3 - > $silencefile # 2>/dev/null
+# At this point we know whether we are using local files or a network service, and we
+# know that the output directory exists and is writable.
 
-# This generates the actual work-product
-ffmpeg -i "concat:${enfilename}|${silencefile}|${skfilename}|${silencefile}|${skfilename}|${silencefile}" -acodec copy "$outputfile" || exit 2 # 2>/dev/null
+if [ "$use_local_files" = true ] ; then
+  echo using local files as input
+  localfile="$2"
+  echo using local-language file $localfile
 
-rm $enfilename
-rm $skfilename
-rm $silencefile
+  foreignfile==$3
+  echo using foreign-language file $foreignfile
+  if [ $? -ge 4 ]; then
+    foreignfile2==$4
+    echo using second foreign-language file $foreignfile2
+  else
+    foreignfile2==$3
+  fi
+
+
+else # Generate the sound files from provided text arguments
+
+    echo using network service
+
+    # These variables contain the text of each language that will be converted to speech
+    localtext=$2
+    foreigntext=$3
+
+    get_sound $localvoice "$localtext"
+    localfile=$(voice_to_filename $localvoice)
+    get_sound $foreignvoice "$foreigntext"
+    foreignfile1=$(voice_to_filename $foreignvoice)
+    foreignfile2=$foreignfile1
+
+    # Question marks in file names will cause problems.  Remove them before assembling the output filename.
+    localtext=$(normalize $localtext)
+    foreigntext=$(normalize $foreigntext)
+    outputfile="${outputdir}/${localtext} - ${foreigntext}.mp3"
+
+fi
+
+# Now the variables `localfile`, `foreignfile1` and `foreignfile2` contain the
+# names of the files with the audio that will go into the final output file, and
+# `outputfile` contains the name of the output file.
+
+echo output filename is $outputfile
+
+# Generate the silence files.  The first is as long as the first foreign sound file, the
+# second the second.
+
+silencefile1=silence1.mp3
+silencefile2=silence2.mp3
+
+# This function takes two arguments: the first is an existing sound file, the
+# second a filename into which a silence as long as the existing file will be written.
+# Return the duration of a sound file, one second minimum.
+write_silence() {
+  local duration=`ffmpeg -i $1 2>&1 | grep Duration | awk '{print $2}' | sed s/,//`
+  duration=$(echo $duration | sed 's/00:00:00\.[0-9][0-9]/00:00:01/')
+  ffmpeg -f lavfi -i anullsrc=r=24000:cl=mono -t $duration -b:a 32k -f mp3 - > $2
+}
+
+write_silence $foreignfile1 $silencefile1
+write_silence $foreignfile2 $silencefile2
+
+# This command generates the actual work-product
+ffmpeg -i "concat:${localfile}|${silencefile1}|${foreignfile1}|${silencefile2}|${foreignfile2}|${silencefile2}" \
+       -acodec copy "$outputfile" || exit 2
+
+rm $localfile
+rm $foreignfile1
+if [ $foreignfile2 != $foreignfile2 ]; then
+  rm $foreignfile2
+fi
+rm $silencefile1
+rm $silencefile2
 
 ls -l "$outputfile"
