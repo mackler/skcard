@@ -17,7 +17,7 @@ foreignvoice=sk-SK   # Slovak
 # Define some functions
 
 usage() {
-  echo "usage: $1 outputdir english-text slovak-text | -n outputdir english-file slovak-file [ slovak-file-2 ]" && exit $2
+  echo "usage: $1 outputdir local-text foreign-text | -n outputdir local-file foreign-file1 [ foreign-file-2 ]" && exit $2
 }
 
 # This function converts text of a language to sound using network services
@@ -48,8 +48,8 @@ get_sound() {
 
 # This function just appends the MP3 filetype to a string to get a filename
 
-voice_to_filename() {
-  echo $1.mp3
+add_suffix() {
+  echo "$1".mp3
 }
 
 # This function removes question marks and periods
@@ -74,6 +74,11 @@ if [ ! -d "$outputdir" -o ! -w "$outputdir" ]; then
   echo bad output directory $outputdir && exit 3
 fi
 
+# this function removes filename suffix
+remove_suffix() {
+    echo "$1" | sed s/\.[^.]*$//
+}
+
 # At this point we know whether we are using local files or a network service, and we
 # know that the output directory exists and is writable.
 
@@ -83,14 +88,20 @@ if [ "$use_local_files" = true ] ; then
     localfile="$2"
     echo using local-language file $localfile
 
-    foreignfile==$3
-    echo using foreign-language file $foreignfile
-    if [ $? -ge 4 ]; then
-        foreignfile2==$4
+    foreignfile1="$3"
+    echo using foreign-language file $foreignfile1
+    if [ $# -ge 4 ]; then
+        foreignfile2="$4"
         echo using second foreign-language file $foreignfile2
     else
-        foreignfile2==$3
+        foreignfile2="$foreignfile1"
+        echo arg count is $# so using same foreign file twice
     fi
+    strippedlocal="$(remove_suffix "$localfile")"
+    echo stripped local name is $strippedlocal
+    strippedforeign="$(remove_suffix "$foreignfile1")"
+    echo stripped foreign name is $strippedforeign
+    outputfile="$(add_suffix "$strippedlocal - $strippedforeign")"
 else
     # Generate the sound files from command-line specified text
     echo using network service
@@ -100,16 +111,15 @@ else
     foreigntext=$3
 
     get_sound $localvoice "$localtext"
-    localfile=$(voice_to_filename $localvoice)
+    localfile=$(add_suffix $localvoice)
     get_sound $foreignvoice "$foreigntext"
-    foreignfile1=$(voice_to_filename $foreignvoice)
+    foreignfile1=$(add_suffix $foreignvoice)
     foreignfile2=$foreignfile1
 
     # Question marks in file names will cause problems.  Remove them before assembling the output filename.
     localtext=$(normalize $localtext)
     foreigntext=$(normalize $foreigntext)
     outputfile="${outputdir}/${localtext} - ${foreigntext}.mp3"
-
 fi
 
 # Now the variables `localfile`, `foreignfile1` and `foreignfile2` contain the
@@ -129,11 +139,11 @@ silencefile2=silence2.mp3
 # Return the duration of a sound file, one second minimum.
 write_silence() {
     # TODO, figure out how to invoke ffmpeg only only to get these three parameters
-    local duration=$(ffmpeg -i $1 2>&1 | grep Duration | awk '{print $2}' | sed s/,//)
+    local duration=$(ffmpeg -i "$1" 2>&1 | grep Duration | awk '{print $2}' | sed s/,//)
     echo duration is $duration
-    local sample_rate=$(ffmpeg -i $1 2>&1 | grep Stream | awk '{print $5}')
+    local sample_rate=$(ffmpeg -i "$1" 2>&1 | grep Stream | awk '{print $5}')
     echo sample rate is $sample_rate
-    local channels=$(ffmpeg -i $1 2>&1 | grep Stream | awk '{print $7}' | sed s/,//)
+    local channels=$(ffmpeg -i "$1" 2>&1 | grep Stream | awk '{print $7}' | sed s/,//)
     echo channels is $channels
     duration=$(echo $duration | sed 's/00:00:00\.[0-9][0-9]/00:00:01/') # duration must be at least one second
     ffmpeg -f lavfi -i anullsrc=r=${sample_rate}:cl=${channels} -t $duration -b:a 32k -f mp3 - > $2
