@@ -38,13 +38,16 @@ get_sound() {
     local text="$2"
     if [ $debug ]; then
         echo processing $voice text: '"'"${text}"'"'
+        local curl=curl
+    else
+        local curl="curl --silent"
     fi
 
     local url_base=https://soundoftext.com/api/sounds
 
     # First we hit firebaseapp which will make Google generate a token.
     local payload="{ \"engine\": \"Google\", \"data\": {\"text\": \"${text}\", \"voice\": \"${voice}\"} }"
-    local response="$(curl --header "Content-type: application/json" --data "$payload" $url_base)"
+    local response="$($curl --header "Content-type: application/json" --data "$payload" $url_base)"
     if [ $debug ]; then
         echo first response is
         echo $response
@@ -65,9 +68,11 @@ get_sound() {
     local retries=6
     local delay=1
     while [ $retries -gt 0 ]; do
-        response="$(curl ${url_base}/$id)"
-        echo response is
-        echo $response
+        response="$($curl ${url_base}/$id)"
+        if [ $debug ]; then
+            echo response is
+            echo '    '$response
+        fi
         if [ $debug ]; then
             echo response status is
             echo $response | jq .status
@@ -77,7 +82,7 @@ get_sound() {
             local location=`echo $response | jq --raw-output .location`
             retries=0
         elif [ $status = Pending ]; then
-            echo still waiting...
+            echo "still waiting for network service to generate \"${text}\"..."
             retries=`expr $retries - 1`
             delay=`expr $delay \* 2`
             sleep $delay
@@ -94,7 +99,7 @@ get_sound() {
     done
 
     if [ ! $location ]; then
-        echo 'failed to get sound location...quitting'
+        echo 'failed to get network location of sound file...quitting'
         exit 8
     fi
 
@@ -104,8 +109,10 @@ get_sound() {
 
     # Finally, we hit GoogleApis.com again with the token to get the sound:
     local filename=$(add_suffix $voice)
-    curl $location > $filename
-    echo wrote $filename
+    $curl $location > $filename
+    if [ $debug ]; then
+        echo wrote $filename
+    fi
 }
 
 # PROGRAM EXECUTION STARTS HERE
@@ -140,7 +147,9 @@ remove_suffix() {
 
 if [ "$use_local_files" = true ] ; then
     # Use existing sound files specified on the command-line
-    echo using local files as input
+    if [ $debug ]; then
+        echo using local files as input
+    fi
     localfile="$2"
     if [ $debug ]; then
         echo using local-language file $localfile
@@ -172,7 +181,9 @@ if [ "$use_local_files" = true ] ; then
     outputfile="$(add_suffix "$strippedlocal - $strippedforeign")"
 else
     # Generate the sound files from command-line specified text
-    echo using network service
+    if [ $debug ]; then
+        echo using network service
+    fi
 
     # These variables contain the text in each language that will be converted to speech
     localtext=$2
@@ -193,8 +204,6 @@ fi
 # Now the variables `localfile`, `foreignfile1` and `foreignfile2` contain the
 # names of the files with the audio that will go into the final output file, and
 # `outputfile` contains the name of the output file.
-
-echo output filename is $outputfile
 
 # Generate the silence files.  The first is as long as the first foreign sound file, the
 # second the second.
@@ -220,14 +229,14 @@ write_silence() {
         echo channels is $channels
     fi
     duration=$(echo $duration | sed 's/00:00:00\.[0-9][0-9]/00:00:01/') # duration must be at least one second
-    ffmpeg -hide_banner -f lavfi -i anullsrc=r=${sample_rate}:cl=${channels} -t $duration -b:a 32k -f mp3 - > $2
+    ffmpeg -loglevel error -f lavfi -i anullsrc=r=${sample_rate}:cl=${channels} -t $duration -b:a 32k -f mp3 - > $2
 }
 
 write_silence "$foreignfile1" "$silencefile1"
 write_silence "$foreignfile2" "$silencefile2"
 
 # This command generates the actual work-product
-ffmpeg -hide_banner -i "concat:${localfile}|${silencefile1}|${foreignfile1}|${silencefile2}|${foreignfile2}|${silencefile2}" \
+ffmpeg -loglevel error -i "concat:${localfile}|${silencefile1}|${foreignfile1}|${silencefile2}|${foreignfile2}|${silencefile2}" \
        -acodec copy "$outputfile" || exit 2
 
 # Delete the input files IFF we generated them from text:
@@ -240,4 +249,4 @@ fi
 rm $silencefile1
 rm $silencefile2
 
-ls -l "$outputfile"
+echo finished $outputfile
