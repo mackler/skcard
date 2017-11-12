@@ -20,6 +20,17 @@ usage() {
   echo "usage: $1 outputdir local-text foreign-text | -n outputdir local-file foreign-file1 [ foreign-file-2 ]" && exit $2
 }
 
+# This function just appends the MP3 filetype to a string to get a filename
+
+add_suffix() {
+  echo "$1".mp3
+}
+
+# This function removes question marks and periods
+normalize() {
+  echo $@ | sed 's/?|\.//g'
+}
+
 # This function converts text of a language to sound using network services
 
 get_sound() {
@@ -41,20 +52,9 @@ get_sound() {
   echo the $voice download token is "'""$token""'"
 
   # Finally, we hit GoogleApis.com again with the token to get the sound:
-  local filename=$(voice_to_filename $voice)
+  local filename=$(add_suffix $voice)
   curl https://firebasestorage.googleapis.com/v0/b/sound-of-text-3ba84.appspot.com/o/${urltext}\?alt=media\&token=${token} > $filename
   echo $filename
-}
-
-# This function just appends the MP3 filetype to a string to get a filename
-
-add_suffix() {
-  echo "$1".mp3
-}
-
-# This function removes question marks and periods
-normalize() {
-  echo $@ | sed 's/?|\.//g'
 }
 
 # PROGRAM EXECUTION STARTS HERE
