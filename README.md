@@ -45,6 +45,7 @@ For this script to work, you will need the following programs installed:
 
 1. `ffmpeg`
 2. `curl`
+3. `jq`
 3. `grep`
 4. `sed`
 5. `awk`

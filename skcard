@@ -38,22 +38,63 @@ get_sound() {
     local text="$2"
     echo processing $voice text: '"'"${text}"'"'
 
+    local url_base=https://soundoftext.com/api/sounds
+
     # First we hit firebaseapp which will make Google generate a token.
-    local payload="{\"text\": \"${text}\", \"voice\": \"${voice}\"}"
-    local path="$(curl -H "Content-type: application/json" -d "$payload" https://sound-of-text-3ba84.firebaseapp.com/sounds | sed 's/{"path":"\([^\"]*\)"}/\1/')"
-    local urltext=$(echo -n $path | hexdump -v -e '/1 "%02x"' | sed 's/\(..\)/%\1/g')
-    echo encoded $voice text $path is $urltext
+    local payload="{ \"engine\": \"Google\", \"data\": {\"text\": \"${text}\", \"voice\": \"${voice}\"} }"
+    local response="$(curl --header "Content-type: application/json" --data "$payload" $url_base)"
+echo first response is
+echo $response
+echo succes status is
+echo $response | jq .success
+    if [ `echo $response | jq .success` = true ]; then
+        local id=`echo $response | jq --raw-output .id`
+    else
+        echo error: `echo $response | jq .message`
+        exit 4
+    fi
+echo id is $id
 
-    # Next we hit GoogleApis.com to get the token
-    local token=$(curl https://firebasestorage.googleapis.com/v0/b/sound-of-text-3ba84.appspot.com/o/$urltext |
-                grep downloadTokens |
-                sed 's/.*downloadTokens": "\([^"]*\)".*/\1/')
+    # Next we check the status of the requested sound until it is done or we give up
+    local retries=6
+    local delay=1
+    while [ $retries -gt 0 ]; do
+        response="$(curl ${url_base}/$id)"
+        echo response is
+        echo $response
+echo response status is
+echo $response | jq .status
+        status=`echo $response | jq --raw-output .status`
+        if [ $status = Done ]; then
+            local location=`echo $response | jq --raw-output .location`
+            retries=0
+        elif [ $status = Pending ]; then
+            echo still waiting...
+            retries=`expr $retries - 1`
+            delay=`expr $delay \* 2`
+            sleep $delay
+        elif [ $status = Error ]; then
+            echo error: `echo $response | jq --raw-output .message`
+            exit 6
+        elif [ `echo $response | jq .success` = false ]; then
+            echo error: `echo $response | jq .message`
+            exit 8
+        else
+            echo 'unknown error...quitting'
+            exit 7
+        fi        
+    done
 
-    echo the $voice download token is "'""$token""'"
+    if [ ! $location ]; then
+        echo 'failed to get sound location...quitting'
+        exit 8
+    fi
+
+echo location is $location;
 
     # Finally, we hit GoogleApis.com again with the token to get the sound:
     local filename=$(add_suffix $voice)
-    curl https://firebasestorage.googleapis.com/v0/b/sound-of-text-3ba84.appspot.com/o/${urltext}\?alt=media\&token=${token} > $filename
+    curl $location > $filename
     echo $filename
 }
 
