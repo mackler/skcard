@@ -17,61 +17,61 @@ foreignvoice=sk-SK   # Slovak
 # Define some functions
 
 usage() {
-  echo "usage: $1 outputdir local-text foreign-text | -n outputdir local-file foreign-file1 [ foreign-file-2 ]" && exit $2
+    echo "usage: $1 outputdir local-text foreign-text | -n outputdir local-file foreign-file1 [ foreign-file-2 ]" && exit $2
 }
 
 # This function just appends the MP3 filetype to a string to get a filename
 
 add_suffix() {
-  echo "$1".mp3
+    echo "$1".mp3
 }
 
 # This function removes question marks and periods
 normalize() {
-  echo $@ | sed 's/?|\.//g'
+    echo $@ | sed 's/?|\.//g'
 }
 
 # This function converts text of a language to sound using network services
 
 get_sound() {
-  local voice=$1
-  local text="$2"
-  echo processing $voice text: '"'"${text}"'"'
+    local voice=$1
+    local text="$2"
+    echo processing $voice text: '"'"${text}"'"'
 
-  # First we hit firebaseapp which will make Google generate a token.
-  local payload="{\"text\": \"${text}\", \"voice\": \"${voice}\"}"
-  local path="$(curl -H "Content-type: application/json" -d "$payload" https://sound-of-text-3ba84.firebaseapp.com/sounds | sed 's/{"path":"\([^\"]*\)"}/\1/')"
-  local urltext=$(echo -n $path | hexdump -v -e '/1 "%02x"' | sed 's/\(..\)/%\1/g')
-  echo encoded $voice text $path is $urltext
+    # First we hit firebaseapp which will make Google generate a token.
+    local payload="{\"text\": \"${text}\", \"voice\": \"${voice}\"}"
+    local path="$(curl -H "Content-type: application/json" -d "$payload" https://sound-of-text-3ba84.firebaseapp.com/sounds | sed 's/{"path":"\([^\"]*\)"}/\1/')"
+    local urltext=$(echo -n $path | hexdump -v -e '/1 "%02x"' | sed 's/\(..\)/%\1/g')
+    echo encoded $voice text $path is $urltext
 
-  # Next we hit GoogleApis.com to get the token
-  local token=$(curl https://firebasestorage.googleapis.com/v0/b/sound-of-text-3ba84.appspot.com/o/$urltext |
-            grep downloadTokens |
-            sed 's/.*downloadTokens": "\([^"]*\)".*/\1/')
+    # Next we hit GoogleApis.com to get the token
+    local token=$(curl https://firebasestorage.googleapis.com/v0/b/sound-of-text-3ba84.appspot.com/o/$urltext |
+                grep downloadTokens |
+                sed 's/.*downloadTokens": "\([^"]*\)".*/\1/')
 
-  echo the $voice download token is "'""$token""'"
+    echo the $voice download token is "'""$token""'"
 
-  # Finally, we hit GoogleApis.com again with the token to get the sound:
-  local filename=$(add_suffix $voice)
-  curl https://firebasestorage.googleapis.com/v0/b/sound-of-text-3ba84.appspot.com/o/${urltext}\?alt=media\&token=${token} > $filename
-  echo $filename
+    # Finally, we hit GoogleApis.com again with the token to get the sound:
+    local filename=$(add_suffix $voice)
+    curl https://firebasestorage.googleapis.com/v0/b/sound-of-text-3ba84.appspot.com/o/${urltext}\?alt=media\&token=${token} > $filename
+    echo $filename
 }
 
 # PROGRAM EXECUTION STARTS HERE
 
 if [ $# -lt 3 ]; then # not enough arguments passed on script invocation
-  usage $0 1
+    usage $0 1
 fi
 
 if [ "$1" = -n ]; then  # user is providing existing audio filenames rather than text to convert
-  use_local_files=true
-  shift
+    use_local_files=true
+    shift
 fi
 
 outputdir=$1
 
 if [ ! -d "$outputdir" -o ! -w "$outputdir" ]; then
-  echo bad output directory $outputdir && exit 3
+    echo bad output directory $outputdir && exit 3
 fi
 
 # this function removes filename suffix
@@ -106,7 +106,7 @@ else
     # Generate the sound files from command-line specified text
     echo using network service
 
-    # These variables contain the text of each language that will be converted to speech
+    # These variables contain the text in each language that will be converted to speech
     localtext=$2
     foreigntext=$3
 
@@ -114,7 +114,7 @@ else
     localfile=$(add_suffix $localvoice)
     get_sound $foreignvoice "$foreigntext"
     foreignfile1=$(add_suffix $foreignvoice)
-    foreignfile2=$foreignfile1
+    foreignfile2=$foreignfile1 # since we repeate the foreign clip
 
     # Question marks in file names will cause problems.  Remove them before assembling the output filename.
     localtext=$(normalize $localtext)
@@ -139,21 +139,21 @@ silencefile2=silence2.mp3
 # Return the duration of a sound file, one second minimum.
 write_silence() {
     # TODO, figure out how to invoke ffmpeg only only to get these three parameters
-    local duration=$(ffmpeg -i "$1" 2>&1 | grep Duration | awk '{print $2}' | sed s/,//)
+    local duration=$(ffmpeg -hide_banner -i "$1" 2>&1 | grep Duration | awk '{print $2}' | sed s/,//)
     echo duration is $duration
-    local sample_rate=$(ffmpeg -i "$1" 2>&1 | grep Stream | awk '{print $5}')
+    local sample_rate=$(ffmpeg -hide_banner -i "$1" 2>&1 | grep Stream | awk '{print $5}')
     echo sample rate is $sample_rate
-    local channels=$(ffmpeg -i "$1" 2>&1 | grep Stream | awk '{print $7}' | sed s/,//)
+    local channels=$(ffmpeg -hide_banner -i "$1" 2>&1 | grep Stream | awk '{print $7}' | sed s/,//)
     echo channels is $channels
     duration=$(echo $duration | sed 's/00:00:00\.[0-9][0-9]/00:00:01/') # duration must be at least one second
-    ffmpeg -f lavfi -i anullsrc=r=${sample_rate}:cl=${channels} -t $duration -b:a 32k -f mp3 - > $2
+    ffmpeg -hide_banner -f lavfi -i anullsrc=r=${sample_rate}:cl=${channels} -t $duration -b:a 32k -f mp3 - > $2
 }
 
 write_silence "$foreignfile1" "$silencefile1"
 write_silence "$foreignfile2" "$silencefile2"
 
 # This command generates the actual work-product
-ffmpeg -i "concat:${localfile}|${silencefile1}|${foreignfile1}|${silencefile2}|${foreignfile2}|${silencefile2}" \
+ffmpeg -hide_banner -i "concat:${localfile}|${silencefile1}|${foreignfile1}|${silencefile2}|${foreignfile2}|${silencefile2}" \
        -acodec copy "$outputfile" || exit 2
 
 # Delete the input files IFF we generated them from text:
