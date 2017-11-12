@@ -17,7 +17,7 @@ foreignvoice=sk-SK   # Slovak
 # Define some functions
 
 usage() {
-    echo "usage: $1 outputdir local-text foreign-text | -n outputdir local-file foreign-file1 [ foreign-file-2 ]" && exit $2
+    echo "usage: $1 [ -d ] outputdir local-text foreign-text | -n outputdir local-file foreign-file1 [ foreign-file-2 ]" && exit $2
 }
 
 # This function just appends the MP3 filetype to a string to get a filename
@@ -36,24 +36,30 @@ normalize() {
 get_sound() {
     local voice=$1
     local text="$2"
-    echo processing $voice text: '"'"${text}"'"'
+    if [ $debug ]; then
+        echo processing $voice text: '"'"${text}"'"'
+    fi
 
     local url_base=https://soundoftext.com/api/sounds
 
     # First we hit firebaseapp which will make Google generate a token.
     local payload="{ \"engine\": \"Google\", \"data\": {\"text\": \"${text}\", \"voice\": \"${voice}\"} }"
     local response="$(curl --header "Content-type: application/json" --data "$payload" $url_base)"
-echo first response is
-echo $response
-echo succes status is
-echo $response | jq .success
+    if [ $debug ]; then
+        echo first response is
+        echo $response
+        echo succes status is
+        echo $response | jq .success
+    fi
     if [ `echo $response | jq .success` = true ]; then
         local id=`echo $response | jq --raw-output .id`
     else
         echo error: `echo $response | jq .message`
         exit 4
     fi
-echo id is $id
+    if [ $debug ]; then
+        echo sound id is $id
+    fi
 
     # Next we check the status of the requested sound until it is done or we give up
     local retries=6
@@ -62,8 +68,10 @@ echo id is $id
         response="$(curl ${url_base}/$id)"
         echo response is
         echo $response
-echo response status is
-echo $response | jq .status
+        if [ $debug ]; then
+            echo response status is
+            echo $response | jq .status
+        fi
         status=`echo $response | jq --raw-output .status`
         if [ $status = Done ]; then
             local location=`echo $response | jq --raw-output .location`
@@ -90,18 +98,25 @@ echo $response | jq .status
         exit 8
     fi
 
-echo location is $location;
+    if [ $debug ]; then
+        echo location is $location;
+    fi
 
     # Finally, we hit GoogleApis.com again with the token to get the sound:
     local filename=$(add_suffix $voice)
     curl $location > $filename
-    echo $filename
+    echo wrote $filename
 }
 
 # PROGRAM EXECUTION STARTS HERE
 
 if [ $# -lt 3 ]; then # not enough arguments passed on script invocation
     usage $0 1
+fi
+
+if [ "$1" = -d ]; then
+    debug=true
+    shift
 fi
 
 if [ "$1" = -n ]; then  # user is providing existing audio filenames rather than text to convert
@@ -127,21 +142,33 @@ if [ "$use_local_files" = true ] ; then
     # Use existing sound files specified on the command-line
     echo using local files as input
     localfile="$2"
-    echo using local-language file $localfile
+    if [ $debug ]; then
+        echo using local-language file $localfile
+    fi
 
     foreignfile1="$3"
-    echo using foreign-language file $foreignfile1
+    if [ $debug ]; then
+        echo using foreign-language file $foreignfile1
+    fi
     if [ $# -ge 4 ]; then
         foreignfile2="$4"
-        echo using second foreign-language file $foreignfile2
+        if [ $debug ]; then
+            echo using second foreign-language file $foreignfile2
+        fi
     else
         foreignfile2="$foreignfile1"
-        echo arg count is $# so using same foreign file twice
+        if [ $debug ]; then
+            echo arg count is $# so using same foreign file twice
+        fi
     fi
     strippedlocal="$(remove_suffix "$localfile")"
-    echo stripped local name is $strippedlocal
+    if [ $debug ]; then
+        echo stripped local name is $strippedlocal
+    fi
     strippedforeign="$(remove_suffix "$foreignfile1")"
-    echo stripped foreign name is $strippedforeign
+    if [ $debug ]; then
+        echo stripped foreign name is $strippedforeign
+    fi
     outputfile="$(add_suffix "$strippedlocal - $strippedforeign")"
 else
     # Generate the sound files from command-line specified text
@@ -181,11 +208,17 @@ silencefile2=silence2.mp3
 write_silence() {
     # TODO, figure out how to invoke ffmpeg only only to get these three parameters
     local duration=$(ffmpeg -hide_banner -i "$1" 2>&1 | grep Duration | awk '{print $2}' | sed s/,//)
-    echo duration is $duration
+    if [ $debug ]; then
+        echo duration is $duration
+    fi
     local sample_rate=$(ffmpeg -hide_banner -i "$1" 2>&1 | grep Stream | awk '{print $5}')
-    echo sample rate is $sample_rate
+    if [ $debug ]; then
+        echo sample rate is $sample_rate
+    fi
     local channels=$(ffmpeg -hide_banner -i "$1" 2>&1 | grep Stream | awk '{print $7}' | sed s/,//)
-    echo channels is $channels
+    if [ $debug ]; then
+        echo channels is $channels
+    fi
     duration=$(echo $duration | sed 's/00:00:00\.[0-9][0-9]/00:00:01/') # duration must be at least one second
     ffmpeg -hide_banner -f lavfi -i anullsrc=r=${sample_rate}:cl=${channels} -t $duration -b:a 32k -f mp3 - > $2
 }

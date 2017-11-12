@@ -55,6 +55,9 @@ Most of these are pretty standard.
 
 ## Bugs
 
+The single-letter command-line arguments cannot be combined into clusters, and the order matters.
+In particular, the debugging switch `-d` must, if used, come first.
+
 If you provide audio files their names must have a suffix that will be stripped before
 determining the output filename.
 
