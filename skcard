@@ -28,7 +28,7 @@ add_suffix() {
 
 # This function removes question marks and periods
 normalize() {
-    echo $@ | sed 's/?|\.//g'
+    echo $@ | sed -E 's/\?//g' | sed 's/\./;/g'
 }
 
 # This function converts text of a language to sound using network services
@@ -91,7 +91,7 @@ get_sound() {
             exit 6
         elif [ `echo $response | jq .success` = false ]; then
             echo error: `echo $response | jq .message`
-            exit 8
+            exit 9
         else
             echo 'unknown error...quitting'
             exit 7
@@ -215,11 +215,16 @@ silencefile2=silence2.mp3
 # second a filename into which a silence as long as the existing file will be written.
 # Return the duration of a sound file, one second minimum.
 write_silence() {
-    # TODO, figure out how to invoke ffmpeg only only to get these three parameters
+    # TODO, figure out how to invoke ffmpeg only once to get these three parameters
     local duration=$(ffmpeg -hide_banner -i "$1" 2>&1 | grep Duration | awk '{print $2}' | sed s/,//)
+    if [ $? -ne 0 ]; then
+        echo 'error...quitting'
+        exit 10
+    fi
     if [ $debug ]; then
         echo duration is $duration
     fi
+
     local sample_rate=$(ffmpeg -hide_banner -i "$1" 2>&1 | grep Stream | awk '{print $5}')
     if [ $debug ]; then
         echo sample rate is $sample_rate
