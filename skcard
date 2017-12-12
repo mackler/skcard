@@ -47,12 +47,21 @@ get_sound() {
 
     # First we hit firebaseapp which will make Google generate a token.
     local payload="{ \"engine\": \"Google\", \"data\": {\"text\": \"${text}\", \"voice\": \"${voice}\"} }"
-    local response="$($curl --header "Content-type: application/json" --data "$payload" $url_base)"
+    local command="$curl -f --header 'Content-type: application/json' --data '$payload' $url_base"
+    if [ $debug ]; then
+        echo $command
+    fi
+    local response
+    # TODO: how can I use the $command variable here??
+    response="`$curl -f --header "Content-type: application/json" --data "$payload" $url_base`"
+    if [ $? -ne 0 ]; then
+        echo "server error...giving up on $text"
+        exit 12
+    fi
     if [ $debug ]; then
         echo first response is
         echo $response
-        echo succes status is
-        echo $response | jq .success
+        echo success status is `$response | jq .success`
     fi
     if [ `echo $response | jq .success` = true ]; then
         local id=`echo $response | jq --raw-output .id`
@@ -76,8 +85,7 @@ get_sound() {
             echo '    '$response
         fi
         if [ $debug ]; then
-            echo response status is
-            echo $response | jq .status
+            echo response status is `$response | jq .status`
         fi
         status=`echo $response | jq --raw-output .status`
         if [ $status = Done ]; then
@@ -220,25 +228,25 @@ write_silence() {
     # TODO, figure out how to invoke ffmpeg only once to get these three parameters
     local duration=$(ffmpeg -hide_banner -i "$1" 2>&1 | grep Duration | awk '{print $2}' | sed s/,//)
     if [ $? -ne 0 ]; then
-        echo 'error...quitting'
+        echo 'error getting duration...quitting $1'
         exit 10
     fi
     if [ $debug ]; then
-        echo duration is $duration
+        echo -n "duration of \"$1\" is $duration,"
     fi
 
     local sample_rate=$(ffmpeg -hide_banner -i "$1" 2>&1 | grep Stream | awk '{print $5}')
     if [ $debug ]; then
-        echo sample rate is $sample_rate
+        echo -n "sample rate is $sample_rate,"
     fi
     local channels=$(ffmpeg -hide_banner -i "$1" 2>&1 | grep Stream | awk '{print $7}' | sed s/,//)
     if [ $debug ]; then
-        echo channels is $channels
+        echo "channels is $channels"
     fi
     duration=$(echo $duration | sed 's/00:00:00\.[0-9][0-9]/00:00:01/') # duration must be at least one second
     ffmpeg -loglevel error -f lavfi -i anullsrc=r=${sample_rate}:cl=${channels} -t $duration -b:a 32k -f mp3 - > $2
     if [ $? -ne 0 ]; then
-        echo 'error...quitting'
+        echo 'error writing $2...quitting'
         exit 11
     fi
 }

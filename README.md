@@ -68,6 +68,6 @@ the silence in the output file.
 
 This is just a simple shell script that makes network requests using `curl`.  The actual text-to-speech
 work is performed by the back-end of [Nick Pierson](https://twitter.com/NickOnTheWeb)'s
-[Sound of Text](https://beta.soundoftext.com/) web application.  This, in turn, uses
+[Sound of Text](https://soundoftext.com/) web application.  This, in turn, uses
 the speech-to-text engine of [Google Translate](https://translate.google.com/).
 You can support Nick's valuable work on his [Patreon](https://www.patreon.com/nickpierson).
