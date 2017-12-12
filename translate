@@ -1,0 +1,76 @@
+#!/bin/sh
+
+#
+# Usage
+# invoke, passing as:
+#   first argument: the file containing the google API key
+#   second argument: a single argument the name of the file containing the phrases-to-be-translated.
+#                    This filename must end in ".sk" and the script will put the translations into a
+#                    file ending in ".en"
+
+if [ $# -lt 2 ]; then # not enough arguments passed on script invocation
+    echo usage $0 google-keyfile input-file
+    exit 2
+fi
+
+if [ ! -r $1 ]; then
+    echo bad key file $1
+    exit 3
+fi
+
+google_key=$(cat $1)
+input_file=$2
+
+if [ ! -r $input_file ]; then
+    echo bad file $input_file
+    exit 3
+fi
+
+output_file=$(echo $input_file | sed s/.sk$/.en/)
+
+if [ -s $output_file ]; then
+    echo "$output_file contains data...quitting"
+    exit 1
+fi
+
+max_lines=127
+line_count=`wc -l $input_file | awk '{print $1}'`
+quotient=`expr $line_count / $max_lines`
+remainder=`expr $line_count % $max_lines`
+if [ $remainder -gt 0 ]
+   then request_count=$quotient
+else
+    request_count=`expr $quotient - 1`
+fi
+
+echo $input_file has $line_count lines
+echo request count is $request_count
+
+#
+# head command will always be:   head -${max_lines}
+# First tail command will be:  tail `expr ${line_count} - 0`
+# Second tail command will be:  tail `expr ${line_count} - ${max_lines}`
+# third tail command will be:  tail `expr ${line_count} -  ${max_lines} * 2 `
+# etce
+#
+
+#
+# Google gives us some characters as HTML decimal entities, e.g. &#39; for a single quote.
+# We can fix these with perl:
+#   perl -p -e 's/&#(\d+);/chr(39)/e'
+#
+
+for r in `seq 0 $request_count`; do
+#for r in `seq 0 2`; do
+    curl --header 'Content-type: application/json' \
+    -d '{"target":"en","source":"sk",'"$(
+      tail -`expr $line_count - $max_lines \* $r ` $input_file | head -$max_lines |
+      sed 's/.*/"q":"&"/' | paste -sd "," -
+    )""}" \
+    https://translation.googleapis.com/language/translate/v2?key=${google_key} \
+    | jq '.data.translations | map(.translatedText) | .[] ' \
+    >> $output_file
+done
+
+# Convert numerical HTML entities to ASCII
+perl -i.html -p -e 's/&#(\d+);/chr(39)/e' $output_file

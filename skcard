@@ -57,7 +57,9 @@ get_sound() {
     if [ `echo $response | jq .success` = true ]; then
         local id=`echo $response | jq --raw-output .id`
     else
-        echo error: `echo $response | jq .message`
+        echo "error processing $text"
+        echo "response was:"
+        echo $response
         exit 4
     fi
     if [ $debug ]; then
@@ -235,6 +237,10 @@ write_silence() {
     fi
     duration=$(echo $duration | sed 's/00:00:00\.[0-9][0-9]/00:00:01/') # duration must be at least one second
     ffmpeg -loglevel error -f lavfi -i anullsrc=r=${sample_rate}:cl=${channels} -t $duration -b:a 32k -f mp3 - > $2
+    if [ $? -ne 0 ]; then
+        echo 'error...quitting'
+        exit 11
+    fi
 }
 
 write_silence "$foreignfile1" "$silencefile1"
