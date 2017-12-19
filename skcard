@@ -40,7 +40,7 @@ get_sound() {
         echo processing $voice text: '"'"${text}"'"'
         local curl=curl
     else
-        local curl="curl --silent"
+        local curl="curl --silent --show-error"
     fi
 
     local url_base=https://soundoftext.com/api/sounds
@@ -120,6 +120,10 @@ get_sound() {
     # Finally, we hit GoogleApis.com again with the token to get the sound:
     local filename=$(add_suffix $voice)
     $curl $location > $filename
+    if [ $? -ne 0 ]; then
+        echo "failed to get speech audio...giving up on $text"
+        exit 13
+    fi
     if [ $debug ]; then
         echo wrote $filename
     fi
@@ -246,7 +250,7 @@ write_silence() {
     duration=$(echo $duration | sed 's/00:00:00\.[0-9][0-9]/00:00:01/') # duration must be at least one second
     ffmpeg -loglevel error -f lavfi -i anullsrc=r=${sample_rate}:cl=${channels} -t $duration -b:a 32k -f mp3 - > $2
     if [ $? -ne 0 ]; then
-        echo 'error writing $2...quitting'
+        echo "error generating silence...quitting"
         exit 11
     fi
 }
