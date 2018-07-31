@@ -43,7 +43,7 @@ get_sound() {
         local curl="curl --silent --show-error"
     fi
 
-    local url_base=https://soundoftext.com/api/sounds
+    local url_base=https://api.soundoftext.com/sounds
 
     # First we hit firebaseapp which will make Google generate a token.
     local payload="{ \"engine\": \"Google\", \"data\": {\"text\": \"${text}\", \"voice\": \"${voice}\"} }"
