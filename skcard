@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# This script takes three arguments: (1) the output directory, (2) English text, (3) Slovak text
-# It creates an MP3 flashcard consisting of the English text followed by the Slovak text twice.
+# This script takes a minimum of two arguments: (1) Card-front text, (2) Card-back text.
+# It creates an MP3 flashcard consisting of the front text followed by the back text twice.
 
 # Depends on this site: https://beta.soundoftext.com/
 # First we make a POST to https://sound-of-text-3ba84.firebaseapp.com/sounds
@@ -17,11 +17,10 @@ foreignvoice=sk-SK   # Slovak
 # Define some functions
 
 usage() {
-    echo "usage: $1 [ -d ] [ -o outputdir ] local-text foreign-text | -n local-file foreign-file1 [ foreign-file-2 ]" && exit $2
+    echo "usage: $1 [ -d ] [ -f] [ -o outputdir ] front-text back-text | -n front-file back-file1 [ back-file-2 ]" && exit $2
 }
 
 # This function just appends the MP3 filetype to a string to get a filename
-
 add_suffix() {
     echo "$1".mp3
 }
@@ -36,6 +35,7 @@ normalize() {
 get_sound() {
     local voice=$1
     local text="$2"
+    local filename="$3"
     if [ $debug ]; then
         echo processing $voice text: '"'"${text}"'"'
         local curl=curl
@@ -118,7 +118,7 @@ get_sound() {
     fi
 
     # Finally, we hit GoogleApis.com again with the token to get the sound:
-    local filename=$(add_suffix $voice)
+    local filename=$(add_suffix $filename)
     $curl $location > $filename
     if [ $? -ne 0 ]; then
         echo "failed to get speech audio...giving up on $text"
@@ -136,8 +136,12 @@ if [ $# -lt 2 ]; then # not enough arguments passed on script invocation
 fi
 
 outputdir=. # we might override below
+frontvoice=$foreignvoice
+backvoice=$foreignvoice
 
+# Process command-line options
 while [ $# -gt 2 ]; do
+
   if [ "$1" = -d ]; then
       debug=true
       shift
@@ -155,6 +159,12 @@ while [ $# -gt 2 ]; do
         echo "set output directory to $outputdir"
       fi
   fi
+
+  if [ "$1" = -f ]; then # front of card is in local language
+      frontvoice=$localvoice
+      shift
+  fi
+
 done
 
 if [ ! -d "$outputdir" -o ! -w "$outputdir" ]; then
@@ -212,16 +222,20 @@ else
     # These variables contain the text in each language that will be converted to speech
     localtext=$1
     foreigntext=$2
+    frontfile="cardfront"
+    backfile="cardback"
 
     if [ $debug ]; then
 	echo "front text is $localtext"
 	echo "back text is $foreigntext"
     fi
 
-    get_sound $localvoice "$localtext"
-    localfile=$(add_suffix $localvoice)
-    get_sound $foreignvoice "$foreigntext"
-    foreignfile1=$(add_suffix $foreignvoice)
+    get_sound $frontvoice "$localtext" $frontfile
+#    localfile=$(add_suffix $frontvoice)
+    localfile=$(add_suffix $frontfile)
+    get_sound $backvoice "$foreigntext" $backfile
+#    foreignfile1=$(add_suffix $backvoice)
+    foreignfile1=$(add_suffix $backfile)
     foreignfile2=$foreignfile1 # since we repeate the foreign clip
 
     # Question marks in file names will cause problems.  Remove them before assembling the output filename.

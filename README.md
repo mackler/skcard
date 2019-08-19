@@ -11,19 +11,28 @@ languages supported by Google's text-to-speech service.
 
 Invoke this script with two arguments:
 
-1. The local language text (as written, this will be English); and
-2. The foreign language text (as written, this will be Slovak).
+1. The text for the front of the flashcard
+2. The text for the back of the flashcard
+
+By default, both the front and back of the card will be spoken in the foreign language
+that is configured within the script.  By using the `-f` command-line option, the front of
+the card will be spoken in the local language that is configured within the script.
+
+As written, the local language is English and the foreign language is Slovak.
 
 ### Example
 
-    skcard /home/fred/tmp/ "I am here" "Ja som tu"
+    skcard -o /home/fred/tmp/ -f "I am here" "Ja som tu"
 
-The generated flashcard will be an MP3 file containing the local-language speech, followed by
-the foreign-language speech repeated twice, with silence before and after the
-foreign-language speech.
+In this example, The generated flashcard will be an MP3 file
+containing the card-front speech in the local language, followed by
+the card-back speech repeated twice in the foreign language, with
+silence before and after the card-back speech.  The output file will be written to the
+`/home/fred/tmp` directory.
 
-The output file will be written to the current working directory.  You can specify an
-output directory by using the `-o` command-line option.
+Without the `-o` command-line option, the output file will be written
+to the current working directory.  Without the `-f` command-line option, the card-front
+text will be spoken in the foreign language.
 
 ## Using Existing Sound Files
 
