@@ -17,7 +17,7 @@ foreignvoice=sk-SK   # Slovak
 # Define some functions
 
 usage() {
-    echo "usage: $1 [ -d ] outputdir local-text foreign-text | -n outputdir local-file foreign-file1 [ foreign-file-2 ]" && exit $2
+    echo "usage: $1 [ -d ] [ -o outputdir ] local-text foreign-text | -n local-file foreign-file1 [ foreign-file-2 ]" && exit $2
 }
 
 # This function just appends the MP3 filetype to a string to get a filename
@@ -131,21 +131,31 @@ get_sound() {
 
 # PROGRAM EXECUTION STARTS HERE
 
-if [ $# -lt 3 ]; then # not enough arguments passed on script invocation
+if [ $# -lt 2 ]; then # not enough arguments passed on script invocation
     usage $0 1
 fi
 
-if [ "$1" = -d ]; then
-    debug=true
-    shift
-fi
+outputdir=. # we might override below
 
-if [ "$1" = -n ]; then  # user is providing existing audio filenames rather than text to convert
-    use_local_files=true
-    shift
-fi
+while [ $# -gt 2 ]; do
+  if [ "$1" = -d ]; then
+      debug=true
+      shift
+  fi
 
-outputdir=$1
+  if [ "$1" = -n ]; then  # user is providing existing audio filenames rather than text to convert
+      use_local_files=true
+      shift
+  fi
+
+  if [ "$1" = -o ]; then # user-specified output directory
+      outputdir=$2
+      shift 2
+      if [ $debug ]; then
+        echo "set output directory to $outputdir"
+      fi
+  fi
+done
 
 if [ ! -d "$outputdir" -o ! -w "$outputdir" ]; then
     echo bad output directory $outputdir && exit 3
@@ -200,8 +210,13 @@ else
     fi
 
     # These variables contain the text in each language that will be converted to speech
-    localtext=$2
-    foreigntext=$3
+    localtext=$1
+    foreigntext=$2
+
+    if [ $debug ]; then
+	echo "front text is $localtext"
+	echo "back text is $foreigntext"
+    fi
 
     get_sound $localvoice "$localtext"
     localfile=$(add_suffix $localvoice)

@@ -9,11 +9,10 @@ languages supported by Google's text-to-speech service.
 
 ## How to use
 
-Invoke this script with three arguments:
+Invoke this script with two arguments:
 
-1. The output directory where you want the new card to be written;
-2. The local language text (as written, this will be English); and
-3. The foreign language text (as written, this will be Slovak).
+1. The local language text (as written, this will be English); and
+2. The foreign language text (as written, this will be Slovak).
 
 ### Example
 
@@ -22,6 +21,9 @@ Invoke this script with three arguments:
 The generated flashcard will be an MP3 file containing the local-language speech, followed by
 the foreign-language speech repeated twice, with silence before and after the
 foreign-language speech.
+
+The output file will be written to the current working directory.  You can specify an
+output directory by using the `-o` command-line option.
 
 ## Using Existing Sound Files
 
